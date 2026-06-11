@@ -1,0 +1,3 @@
+﻿using System.Diagnostics.CodeAnalysis;
+[assembly: SuppressMessage("Style", "IDE0028:Simplify collection initialization", Justification = "Suggested fix does not function, as the project uses an older C# version.", Scope = "module")]
+[assembly: SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "Primary constructors reduce code readability in some instances.", Scope = "module")]

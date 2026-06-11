@@ -1,0 +1,170 @@
+﻿using PlancakeSerializer.BuiltIns;
+using PlancakeSerializer.Headers;
+using System.Diagnostics.CodeAnalysis;
+
+namespace PlancakeSerializer.Serialization
+{
+    /// <summary>
+    /// Converts a constructed data packet back into its components.
+    /// </summary>
+    public class DataDestructor
+    {
+        const int TMP_BUF_SIZE = 1024;
+
+        readonly Stream _stream;
+        readonly byte[] _tmpBuf = new byte[TMP_BUF_SIZE];
+        readonly GlobalSerializer _serializer;
+
+        /// <summary>
+        /// The identifier for the currently-read object.
+        /// </summary>
+        /// <remarks>
+        /// This can be used to generate unique headers for each
+        /// serialized object if necessary.
+        /// </remarks>
+        public long CurrentReadNum => _readNum;
+        long _readNum;
+
+        Dictionary<long, Header>? _headerIndices;
+
+        public DataDestructor(GlobalSerializer ser, Stream s)
+        {
+            _stream = s;
+            _serializer = ser;
+            ExtractHeaders();
+        }
+
+        public DataDestructor(byte[] bytes, GlobalSerializer ser)
+        {
+            _stream = new MemoryStream(bytes);
+            _serializer = ser;
+            ExtractHeaders();
+        }
+
+        void ExtractHeaders()
+        {
+            _stream.ReadExactly(_tmpBuf, 0, sizeof(ushort));
+            ushort headerCount = BitConverter.ToUInt16(_tmpBuf, 0);
+
+            _headerIndices = new Dictionary<long, Header>(headerCount);
+
+            for (int i = 0; i < headerCount; i++)
+            {
+                Header h = Header.FromStream(_stream);
+                _headerIndices.Add(h.LongHash(), h);
+            }
+        }
+
+        /// <summary>
+        /// Reads the next block of bytes.
+        /// </summary>
+        /// <remarks>
+        /// In order for the implicit block sizing to work, these bytes must have been written using a
+        /// <see cref="ISerializer"/> and <see cref="DataConstructor.WriteObject(object)"/>.
+        /// </remarks>
+        /// <returns>A block of bytes to be converted into an object.</returns>
+        /// <exception cref="OverflowException"></exception>
+        public Span<byte> ReadNextBlock()
+        {
+            _stream.ReadExactly(_tmpBuf, 0, sizeof(ushort));
+            ushort len = BitConverter.ToUInt16(_tmpBuf, 0);
+
+            if (len > TMP_BUF_SIZE)
+                throw new OverflowException($"Next read data block indicates a size of {len}, which overflows the max buffer length of ({TMP_BUF_SIZE})!");
+            _stream.ReadExactly(_tmpBuf, 0, len);
+
+            ++_readNum;
+
+            return _tmpBuf.AsSpan()[0..len];
+        }
+
+        /// <summary>
+        /// Whether the deserialization process is completed.
+        /// </summary>
+        /// <remarks>
+        /// Attempting to read further data from a completed
+        /// <see cref="DataDestructor"/> can lead to an error,
+        /// depending on the type of stream used.
+        /// </remarks>
+        /// <returns></returns>
+        public bool IsComplete()
+        {
+            return _stream.Position >= _stream.Length;
+        }
+
+        internal Span<byte> ReadExactly(int ct)
+        {
+            _stream.ReadExactly(_tmpBuf, 0, ct);
+            return _tmpBuf.AsSpan()[0..ct];
+        }
+
+        /// <summary>
+        /// Attempts to read an object from the destructor.
+        /// </summary>
+        /// <typeparam name="T">The type of the next object to read.</typeparam>
+        /// <param name="val">The read <typeparamref name="T"/> if successful.</param>
+        /// <returns>Whether the read was successful.</returns>
+        public bool TryReadObject<T>([NotNullWhen(true)] out T? val)
+        {
+            val = default;
+            if (IsComplete()) return false;
+            if (!TryReadObject(out object? v)) return false;
+            Type target = typeof(T);
+            Type objType = v.GetType();
+            if (
+                !(
+                    // If they are straight-up equal
+                    objType == target ||
+                    // If it extends/implements
+                    target.IsInterface ? objType.IsAssignableTo(target) : objType.IsSubclassOf(target)
+                )
+            ) return false;
+            val = (T)v;
+            return true;
+        }
+
+        /// <summary>
+        /// Attempts to read an object from the destructor.
+        /// </summary>
+        /// <param name="val">The read <see cref="object"/> if successful.</param>
+        /// <returns>Whether the read was successful.</returns>
+        public bool TryReadObject([NotNullWhen(true)] out object? val)
+        {
+            val = default;
+            if (IsComplete()) return false;
+            bool success = _serializer.TryDeserialize(this, out object? v, out Type? objType);
+            if (!success || v == null || objType == null) return false;
+            val = v;
+            return true;
+        }
+
+        /// <summary>
+        /// Attempts to get a <see cref="Header"/> by name.
+        /// </summary>
+        /// <param name="val">The read <see cref="Header"/> if successful.</param>
+        /// <returns>Whether the read was successful.</returns>
+        public bool TryGetHeader(string name, [NotNullWhen(true)] out Header? h)
+        {
+            h = GetHeader(name);
+            return h is not null;
+        }
+
+        /// <summary>
+        /// Gets a <see cref="Header"/> by name.
+        /// </summary>
+        /// <returns>The <see cref="Header"/>, or null if it couldn't be found.</returns>
+        public Header? GetHeader(string name)
+        {
+            if (_headerIndices is null) throw new NullReferenceException($"{_headerIndices} is null!");
+
+            long hash = StringHasher.HashString(name, Header.NAME_HASH_CST);
+
+            if (_headerIndices.TryGetValue(hash, out Header? h))
+            {
+                return h;
+            }
+
+            return null;
+        }
+    }
+}
