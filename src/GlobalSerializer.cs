@@ -35,21 +35,30 @@ namespace PlancakeSerializer
             _serializerHashes = new(hashedTypes);
         }
 
-        internal bool TrySerialize(object obj, in DataConstructor str, in byte[] reserve, out int reserveOffset)
+        internal bool TrySerialize(object obj, in DataConstructor str)
         {
-            reserveOffset = 0;
-            if (_serializers.TryGetValue(obj.GetType(), out ISerializer? s))
+            Type objType = obj.GetType();
+            ISerializer? s = GetSerializer(objType);
+            if (s is not null)
             {
-                if (!_serializerHashes.TryGetHash(obj.GetType(), out long hash))
-                    throw new Exception($"Object type {s.GetType()} is unhashed! Please report this error to the Github repo!");
+                if (!_serializerHashes.TryGetHash(objType, out long hash))
+                    throw new Exception($"Object type {objType.Name} is unhashed! Please report this error to the Github repo!");
                 byte[] hashBytes = BitConverter.GetBytes(hash);
-                str.WriteBytes(hashBytes);
-                reserveOffset = hashBytes.Length;
-                str.WriteBytes(reserve);
+                str.WriteRaw(hashBytes);
                 s.Serialize(obj, str);
                 return true;
             }
             return false;
+        }
+
+        ISerializer? GetSerializer(Type? t)
+        {
+            while (true)
+            {
+                if (t == null) return null;
+                if (_serializers.TryGetValue(t, out ISerializer? s)) return s;
+                else t = t.BaseType;
+            }
         }
 
         internal bool TryDeserialize(
@@ -59,19 +68,10 @@ namespace PlancakeSerializer
         )
         {
             deserialized = null;
-
-            // Object type hash
-            long typeHash = BitConverter.ToInt64(des.ReadExactly(sizeof(long)));
-            
-            if (
-                !_serializerHashes.TryGetType(typeHash, out objectType) ||
-                !_serializers.TryGetValue(objectType, out ISerializer? s)
-            )
-            {
-                return false;
-            }
-
-            deserialized = s.Deserialize(des);
+            long typeHash = BitConverter.ToInt64(des.ReadRaw(sizeof(long)));
+            if (!_serializerHashes.TryGetType(typeHash, out objectType)) return false;
+            ISerializer? s = GetSerializer(objectType);
+            deserialized = s?.Deserialize(des);
             if (deserialized is null) return false;
             return true;
         }

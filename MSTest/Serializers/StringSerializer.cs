@@ -19,7 +19,7 @@ namespace Test.Serializers
 
         public override void SerializeSpecific(string obj, in DataConstructor con)
         {
-            con.WriteBytes(_encoding.GetBytes(obj));
+            con.WriteByteBlock(_encoding.GetBytes(obj));
         }
     }
 }

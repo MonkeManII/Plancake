@@ -1,4 +1,5 @@
 ﻿using PlancakeSerializer.Headers;
+using System.Diagnostics;
 
 namespace PlancakeSerializer.Serialization
 {
@@ -66,15 +67,41 @@ namespace PlancakeSerializer.Serialization
         }
 
         /// <summary>
-        /// Writes a series of bytes to the constructor.
+        /// Writes a block of bytes to the constructor, readable via <see cref="DataDestructor.ReadNextBlock"/>.
+        /// </summary>
+        /// <param name="bytes">The bytes to write.</param>
+        /// <para>
+        /// This should not be used except when defining an < see cref="ISerializer"/>.
+        /// Calling this directly (as you would <see cref="WriteObject(object)"/> or <see cref="WriteHeader(Header)"/>)
+        /// can lead to unexpected outcomes. 
+        /// </para>
+        /// <para>
+        /// Note that <see cref="DataDestructor.ReadRaw(int)"/> will not recognize this. Use <see cref="DataDestructor.ReadNextBlock"/>
+        /// to read a whole block of variable-width data.
+        /// </para>
+        /// </remarks>
+        public void WriteByteBlock(ReadOnlySpan<byte> bytes)
+        {
+            _outStream.Write(BitConverter.GetBytes((ushort)bytes.Length));
+            _outStream.Write(bytes);
+        }
+
+        /// <summary>
+        /// Writes a raw series of bytes to the constructor, readable via <see cref="DataDestructor.ReadRaw(int)">.
         /// </summary>
         /// <param name="bytes">The bytes to write.</param>
         /// <remarks>
-        /// This should not be used except when defining an <see cref="ISerializer"/>.
+        /// <para>
+        /// This should not be used except when defining an < see cref="ISerializer"/>.
         /// Calling this directly (as you would <see cref="WriteObject(object)"/> or <see cref="WriteHeader(Header)"/>)
-        /// can lead to unexpected outcomes.
+        /// can lead to unexpected outcomes. 
+        /// </para>
+        /// <para>
+        /// Note that <see cref="DataDestructor.ReadNextBlock"/> will not recognize this. Use <see cref="DataDestructor.ReadRaw(int)"/>
+        /// to read n bytes as raw data.
+        /// </para>
         /// </remarks>
-        public void WriteBytes(ReadOnlySpan<byte> bytes)
+        public void WriteRaw(ReadOnlySpan<byte> bytes)
         {
             _outStream.Write(bytes);
         }
@@ -101,21 +128,10 @@ namespace PlancakeSerializer.Serialization
             foreach (object o in _objects)
             {
                 long preWritePos = _outStream.Position;
-
-                if (!_serializer.TrySerialize(o, this, in sizePlaceholder, out int offset))
+                if (!_serializer.TrySerialize(o, this))
                 {
                     throw new InvalidOperationException($"Cannot serialize object {o}, as there is no serializer for type '{o.GetType().Name}'!");
                 }
-
-                long lenIdx = preWritePos + offset;
-                preWritePos = lenIdx + sizeof(ushort);
-                long postWritePos = _outStream.Position;
-                BitConverter.GetBytes((ushort)(postWritePos - preWritePos)).CopyTo(sizePlaceholder);
-
-                _outStream.Position = lenIdx;
-                _outStream.Write(sizePlaceholder);
-                _outStream.Position = postWritePos;
-
                 ++_writeNum;
             }
 

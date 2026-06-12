@@ -15,7 +15,7 @@ namespace Example.Serializers
 
         public override void SerializeSpecific(string obj, in DataConstructor con)
         {
-            con.WriteBytes(Encoding.UTF8.GetBytes(obj));
+            con.WriteByteBlock(Encoding.UTF8.GetBytes(obj));
         }
     }
 }

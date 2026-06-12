@@ -1,3 +1,6 @@
 <Solution>
+  <Project Path="example/Example.csproj" />
+  <Project Path="MSTest/Test.csproj" />
+  <Project Path="src/PlancakeSerializer.csproj" />
 
 </Solution>
