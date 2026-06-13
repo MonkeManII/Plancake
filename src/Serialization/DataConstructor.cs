@@ -22,6 +22,7 @@ namespace PlancakeSerializer.Serialization
         /// </remarks>
         public bool IsComplete => _isComplete;
         bool _isComplete;
+        bool _isCompleting;
 
         /// <summary>
         /// The identifier for the currently-written object.
@@ -47,11 +48,19 @@ namespace PlancakeSerializer.Serialization
         /// <summary>
         /// Writes a header to the constructor.
         /// </summary>
+        /// <remarks>
+        /// While headers can be <em>read</em> at any time during deserialization, they must be written before
+        /// calling <see cref="Complete"></see>.
+        /// </remarks>
+        /// <TODO>
+        /// Allow writing of headers during a Complete() call.
+        /// </TODO>
         /// <param name="header">The header to write.</param>
         /// <exception cref="InvalidOperationException"></exception>
         public void WriteHeader(Header header)
         {
             if (IsComplete) throw new InvalidOperationException($"Cannot call {nameof(WriteHeader)} on a complete {nameof(DataConstructor)}!");
+            if (_isCompleting) throw new InvalidOperationException($"Cannot call {nameof(WriteHeader)} during a call to {nameof(Complete)}!");
             _headers.Add(header);
         }
 
@@ -63,7 +72,8 @@ namespace PlancakeSerializer.Serialization
         public void WriteObject(object obj)
         {
             if (IsComplete) throw new InvalidOperationException($"Cannot call {nameof(WriteObject)} on a complete {nameof(DataConstructor)}!");
-            _objects.Add(obj);
+            if (_isCompleting) DirectWrite(obj);
+            else _objects.Add(obj);
         }
 
         /// <summary>
@@ -71,7 +81,7 @@ namespace PlancakeSerializer.Serialization
         /// </summary>
         /// <param name="bytes">The bytes to write.</param>
         /// <para>
-        /// This should not be used except when defining an < see cref="ISerializer"/>.
+        /// This should not be used except when defining an <see cref="ISerializer"/>.
         /// Calling this directly (as you would <see cref="WriteObject(object)"/> or <see cref="WriteHeader(Header)"/>)
         /// can lead to unexpected outcomes. 
         /// </para>
@@ -106,6 +116,15 @@ namespace PlancakeSerializer.Serialization
             _outStream.Write(bytes);
         }
 
+        void DirectWrite(object o)
+        {
+            if (!_serializer.TrySerialize(o, this))
+            {
+                throw new InvalidOperationException($"Cannot serialize object {o}, as there is no serializer for type '{o.GetType().Name}'!");
+            }
+            ++_writeNum;
+        }
+
         /// <summary>
         /// Finalizes the data packet and writes it to the stream.
         /// </summary>
@@ -116,6 +135,7 @@ namespace PlancakeSerializer.Serialization
         public void Complete()
         {
             if (IsComplete) throw new InvalidOperationException($"Cannot call {nameof(Complete)} on an already-completed {nameof(DataConstructor)}!");
+            _isCompleting = true;
 
             _outStream.Write(BitConverter.GetBytes((ushort)_headers.Count));
 
@@ -127,12 +147,7 @@ namespace PlancakeSerializer.Serialization
             _writeNum = 0;
             foreach (object o in _objects)
             {
-                long preWritePos = _outStream.Position;
-                if (!_serializer.TrySerialize(o, this))
-                {
-                    throw new InvalidOperationException($"Cannot serialize object {o}, as there is no serializer for type '{o.GetType().Name}'!");
-                }
-                ++_writeNum;
+                DirectWrite(o);
             }
 
             _isComplete = true;

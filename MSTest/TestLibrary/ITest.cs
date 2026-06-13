@@ -4,7 +4,7 @@ namespace Test.TestLibrary
 {
     public interface ITest
     {
-        public bool RunTest(out string? error);
+        public void RunTest();
 
         public static void RunAll()
         {
@@ -39,8 +39,15 @@ namespace Test.TestLibrary
                 }
                 else
                 {
-                    ITest test = (ITest)info.Invoke(null);
-                    results[i] = new(test.RunTest(out string? error), t.Name, error);
+                    try
+                    {
+                        ITest test = (ITest)info.Invoke(null);
+                        test.RunTest();
+                        results[i] = new(true, t.Name, null);
+                    } catch (Exception e)
+                    {
+                        results[i] = new(false, t.Name, e.Message + "\n" + e.StackTrace);
+                    }
                 }
                 ++i;
             }

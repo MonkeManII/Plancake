@@ -7,7 +7,7 @@ namespace Test.UnitTests
 {
     internal class InheritanceSerializerTest : ITest
     {
-        public bool RunTest(out string? error)
+        public void RunTest()
         {
             GlobalSerializer s = new(ExampleClassSerializer.Serializer, ExampleClassChildSerializer.Serializer);
 
@@ -27,16 +27,15 @@ namespace Test.UnitTests
                 DataDestructor des = new(s, fs);
                 if (!des.TryReadObject(out ExampleClass? val))
                 {
-                    error = "Failed to read object 1 (parent type) from constructed data.";
+                    throw new Exception("Failed to read object 1 (parent type) from constructed data.");
                 }
-                if (!des.TryReadObject(out ExampleClassChild? val2))
+
+                // read the ExampleClassChild as an ExampleClass
+                if (!des.TryReadObject(out ExampleClass? val2))
                 {
-                    error = "Failed to read object 2 (child type) from constructed data.";
+                    throw new Exception("Failed to read object 2 (child type) from constructed data.");
                 }
             }
-
-            error = null;
-            return true;
         }
     }
 }

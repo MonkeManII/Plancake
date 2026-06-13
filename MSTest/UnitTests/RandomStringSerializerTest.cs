@@ -9,17 +9,16 @@ namespace Test.UnitTests
 {
     public class RandomStringSerializerTest : ITest
     {
-        public bool RunTest(out string? message)
+        public void RunTest()
         {
-            if (!Test("Hello, world!", out message)) return false;
-            if (!Test("WAKLHFASKLHF", out message)) return false;
-            if (!Test("9876546887654!@$*(^!*@()$^!@)(*&%^$!@(*)&$%_()&!", out message)) return false;
-            return true;
+            Test("Hello, world!");
+            Test("WAKLHFASKLHF");
+            Test("9876546887654!@$*(^!*@()$^!@)(*&%^$!@(*)&$%_()&!");
         }
 
-        static bool Test(string test, [NotNullWhen(false)] out string? message)
+        static void Test(string test)
         {
-            GlobalSerializer s = new(new StringSerializer(Encoding.UTF8));
+            GlobalSerializer s = new(new StringSerializer());
             byte[] bts = new byte[1024];
             
             using (MemoryStream stream = new(bts))
@@ -37,12 +36,13 @@ namespace Test.UnitTests
 
                 if (destructor.TryReadObject(out string? val))
                 {
-                    message = null;
-                    return true;
+                    if (val != test)
+                    {
+                        throw new Exception($"String output was wrong. (Expected: \"{test}\", got \"{val}\")");
+                    }
                 } else
                 {
-                    message = "Failed to read string. (Expected: " + test + ")";
-                    return false;
+                    throw new Exception($"Failed to read string. (Expected: \"{test}\")");
                 }
             }
         }

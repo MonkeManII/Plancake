@@ -1,5 +1,4 @@
 ﻿using PlancakeSerializer.Serialization;
-using System.Diagnostics;
 using System.Text;
 
 namespace Test.Serializers
