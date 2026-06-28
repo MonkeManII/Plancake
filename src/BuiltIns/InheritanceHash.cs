@@ -86,7 +86,7 @@ namespace PlancakeSerializer.BuiltIns
                     Type[] types = m.GetTypes();
                     foreach (Type t in types)
                     {
-                        if (ImplementsOrExtends(baseClass, t, baseClass.IsInterface))
+                        if (ImplementsOrExtends(baseClass, t))
                         {
                             tList.Add(t);
                         }
@@ -96,14 +96,15 @@ namespace PlancakeSerializer.BuiltIns
             return [.. tList];
         }
 
-        static bool ImplementsOrExtends(Type tBase, Type tImplements, bool isInterface)
+        static bool ImplementsOrExtends(Type tBase, Type tImplements)
         {
-            if (isInterface)
-            {
-                return tImplements == tBase || tImplements.IsSubclassOf(tBase);
-            } else
+            if (tBase.IsInterface)
             {
                 return tImplements.IsAssignableTo(tBase);
+            }
+            else
+            {
+                return tImplements == tBase || tImplements.IsSubclassOf(tBase);
             }
         }
     }

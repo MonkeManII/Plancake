@@ -8,7 +8,6 @@ namespace PlancakeSerializer.Serialization
     /// </summary>
     public class DataConstructor
     {
-        readonly static byte[] sizePlaceholder = new byte[sizeof(ushort)];
         readonly List<Header> _headers = [];
         readonly List<object> _objects = [];
         readonly GlobalSerializer _serializer;
