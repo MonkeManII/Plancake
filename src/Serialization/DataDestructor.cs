@@ -157,6 +157,26 @@ namespace PlancakeSerializer.Serialization
         }
 
         /// <summary>
+        /// Attempts to read an object from the destructor.
+        /// </summary>
+        /// <returns>The read <see cref="object"/>, or null if invalid.</returns>
+        public object? ReadObject()
+        {
+            TryReadObject(out object? o);
+            return o;
+        }
+
+        /// <summary>
+        /// Attempts to read an object from the destructor.
+        /// </summary>
+        /// <returns>The read <typeparamref name="T"/>, or default if invalid.</returns>
+        public T? ReadObject<T>()
+        {
+            TryReadObject(out T? o);
+            return o;
+        }
+
+        /// <summary>
         /// Attempts to get a <see cref="Header"/> by name.
         /// </summary>
         /// <param name="val">The read <see cref="Header"/> if successful.</param>
