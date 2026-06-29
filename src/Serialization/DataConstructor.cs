@@ -8,10 +8,15 @@ namespace PlancakeSerializer.Serialization
     /// </summary>
     public class DataConstructor
     {
-        readonly List<Header> _headers = [];
-        readonly List<object> _objects = [];
+        enum WriteState
+        {
+            Headers,
+            Objects
+        }
+
         readonly GlobalSerializer _serializer;
         readonly Stream _outStream;
+        readonly List<Header> _headers = [];
 
         /// <summary>
         /// Whether this constructor is "completed".
@@ -19,9 +24,8 @@ namespace PlancakeSerializer.Serialization
         /// <remarks>
         /// "Completed" constructors cannot have additional data written to them.
         /// </remarks>
-        public bool IsComplete => _isComplete;
-        bool _isComplete;
-        bool _isCompleting;
+        [Obsolete($"Constructors have no \"complete\" state anymore, so this will always return false.")]
+        public bool IsComplete => false;
 
         /// <summary>
         /// The identifier for the currently-written object.
@@ -33,6 +37,8 @@ namespace PlancakeSerializer.Serialization
         public long CurrentWriteNum => _writeNum;
         long _writeNum;
 
+        WriteState _state;
+
         /// <summary>
         /// Creates a new <see cref="DataConstructor"/> from a <see cref="GlobalSerializer"/> and <see cref="Stream"/>.
         /// </summary>
@@ -42,24 +48,42 @@ namespace PlancakeSerializer.Serialization
         {
             _outStream = outStream;
             _serializer = serializer;
+            _state = WriteState.Headers;
+        }
+
+        void RequireState(WriteState state, string errorName)
+        {
+            if (_state <= WriteState.Headers && state > WriteState.Headers)
+            {
+                WriteHeaders();
+            }
+
+            if (_state <= state) _state = state;
+            else throw new InvalidOperationException($"{errorName} (expected <={state}, got {_state}");
+        }
+
+        void WriteHeaders()
+        {
+            _outStream.Write(BitConverter.GetBytes((ushort)_headers.Count));
+
+            foreach (Header h in _headers)
+            {
+                h.WriteTo(_outStream);
+            }
         }
 
         /// <summary>
         /// Writes a header to the constructor.
         /// </summary>
         /// <remarks>
-        /// While headers can be <em>read</em> at any time during deserialization, they must be written before
-        /// calling <see cref="Complete"></see>.
+        /// While headers can be <em>read</em> at any time during deserialization, they must be <em>written</em> before
+        /// writing any objects.
         /// </remarks>
-        /// <TODO>
-        /// Allow writing of headers during a Complete() call.
-        /// </TODO>
         /// <param name="header">The header to write.</param>
         /// <exception cref="InvalidOperationException"></exception>
         public void WriteHeader(Header header)
         {
-            if (IsComplete) throw new InvalidOperationException($"Cannot call {nameof(WriteHeader)} on a complete {nameof(DataConstructor)}!");
-            if (_isCompleting) throw new InvalidOperationException($"Cannot call {nameof(WriteHeader)} during a call to {nameof(Complete)}!");
+            RequireState(WriteState.Headers, $"Cannot call {nameof(WriteHeader)} after writing an object!");
             _headers.Add(header);
         }
 
@@ -70,9 +94,12 @@ namespace PlancakeSerializer.Serialization
         /// <exception cref="InvalidOperationException"></exception>
         public void WriteObject(object obj)
         {
-            if (IsComplete) throw new InvalidOperationException($"Cannot call {nameof(WriteObject)} on a complete {nameof(DataConstructor)}!");
-            if (_isCompleting) DirectWrite(obj);
-            else _objects.Add(obj);
+            RequireState(WriteState.Objects, $"Cannot call {nameof(WriteObject)} in this state!");
+            if (!_serializer.TrySerialize(obj, this))
+            {
+                throw new InvalidOperationException($"Cannot serialize object {obj}, as there is no serializer for type '{obj.GetType().Name}'!");
+            }
+            ++_writeNum;
         }
 
         /// <summary>
@@ -115,15 +142,6 @@ namespace PlancakeSerializer.Serialization
             _outStream.Write(bytes);
         }
 
-        void DirectWrite(object o)
-        {
-            if (!_serializer.TrySerialize(o, this))
-            {
-                throw new InvalidOperationException($"Cannot serialize object {o}, as there is no serializer for type '{o.GetType().Name}'!");
-            }
-            ++_writeNum;
-        }
-
         /// <summary>
         /// Finalizes the data packet and writes it to the stream.
         /// </summary>
@@ -131,25 +149,7 @@ namespace PlancakeSerializer.Serialization
         /// Completed packets cannot have additional data written to them.
         /// </remarks>
         /// <exception cref="InvalidOperationException"></exception>
-        public void Complete()
-        {
-            if (IsComplete) throw new InvalidOperationException($"Cannot call {nameof(Complete)} on an already-completed {nameof(DataConstructor)}!");
-            _isCompleting = true;
-
-            _outStream.Write(BitConverter.GetBytes((ushort)_headers.Count));
-
-            foreach (Header h in _headers)
-            {
-                h.WriteTo(_outStream);
-            }
-
-            _writeNum = 0;
-            foreach (object o in _objects)
-            {
-                DirectWrite(o);
-            }
-
-            _isComplete = true;
-        }
+        [Obsolete("Calling \"Complete\" to finish a packet is no longer necessary, as packets are constructed on-the-fly.")]
+        public void Complete() { }
     }
 }
